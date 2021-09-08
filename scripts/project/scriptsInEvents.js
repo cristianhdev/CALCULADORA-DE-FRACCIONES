@@ -3,7 +3,7 @@
 
 const scriptsInEvents = {
 
-		async HojaDeEventoCalculadoraFracciones_Event2_Act24(runtime, localVars)
+		async HojaDeEventoCalculadoraFracciones_Event2_Act22(runtime, localVars)
 		{
 			let CajasInit = [
 			    runtime.objects.Caja1.getFirstInstance(),
@@ -31,9 +31,14 @@ const scriptsInEvents = {
 
 		async HojaDeEventoCalculadoraFracciones_Event43_Act1(runtime, localVars)
 		{
+			
 			let resultado = runtime.globalVars.resultadoDivision2;
 			let cleanresultado = resultado.replace("=", '', 2).replace('""', '')
 			let flecha = runtime.objects.SFlecha.getFirstInstance()
+			
+			let mensaje = runtime.objects.TMensaje.getFirstInstance()
+			
+			mensaje.text=""
 			
 			let Cajas = [
 			    runtime.objects.Caja1.getFirstInstance(),
