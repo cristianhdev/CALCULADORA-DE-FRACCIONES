@@ -3512,6 +3512,52 @@ CurrentTime(){if(self["C3_GetAudioContextCurrentTime"])return self["C3_GetAudioC
 }
 
 {
+'use strict';const C3=self.C3;
+C3.Plugins.SVGPicture=class SVGPicturePlugin extends C3.SDKPluginBase{constructor(opts){super(opts);this._rasterManager=null}Release(){super.Release()}_GetRasterManager(){if(!this._rasterManager){this._rasterManager=C3.New(C3.SVGRasterManager);this._rasterManager.SetGetBaseSizeCallback(filename=>this._GetSvgBaseSize(filename));this._rasterManager.SetRasterAtSizeCallback((sf,r,sw,sh,iw,ih)=>this._RasterSvgAtSize(sf,r,sw,sh,iw,ih));this._rasterManager.SetReleaseResultCallback(texture=>this._ReleaseRasterResult(texture));
+this._rasterManager.SetRedrawCallback(()=>this._Redraw());this._rasterManager.SetNpotSurfaceAllowed(this.GetRuntime().GetRenderer().SupportsNPOTTextures())}return this._rasterManager}async _GetSvgBaseSize(filename){const runtime=this.GetRuntime();const blob=await runtime.GetAssetManager().FetchBlob(filename);return await runtime.GetSvgImageSize(blob)}async _RasterSvgAtSize(filename,renderer,surfaceWidth,surfaceHeight,imageWidth,imageHeight){const runtime=this.GetRuntime();const blob=await runtime.GetAssetManager().FetchBlob(filename);
+const textureOpts={mipMap:true,mipMapQuality:"high",anisotropy:this._runtime.GetCanvasManager().GetTextureAnisotropy()};let imageBitmapOpts=null;if(C3.Supports.ImageBitmapOptions){imageBitmapOpts={"premultiplyAlpha":"premultiply"};textureOpts.premultiplyAlpha=false}const drawable=await runtime.RasterSvgImage(blob,imageWidth,imageHeight,surfaceWidth,surfaceHeight,imageBitmapOpts);let texture=null;if(C3.Supports.ImageBitmapOptions)texture=renderer.CreateStaticTexture(drawable,textureOpts);else texture=
+await renderer.CreateStaticTextureAsync(drawable,textureOpts);return texture}_ReleaseRasterResult(texture){texture.GetRenderer().DeleteTexture(texture)}_Redraw(){this.GetRuntime().UpdateRender()}};
+
+}
+
+{
+'use strict';const C3=self.C3;
+C3.Plugins.SVGPicture.Type=class SVGPictureType extends C3.SDKTypeBase{constructor(objectClass){super(objectClass)}Release(){super.Release()}OnCreate(){}LoadTextures(renderer){}ReleaseTextures(){}PreloadTexturesWithInstances(renderer){const rasterImages=new Set;for(const inst of this.GetObjectClass().GetInstances()){const sdkInst=inst.GetSdkInstance();sdkInst._UpdateRasterImage();const rasterImage=sdkInst._GetRasterImage();if(rasterImage)rasterImages.add(rasterImage)}return Promise.all([...rasterImages].map(ri=>this._PreloadRasterImage(renderer,
+ri)))}async _PreloadRasterImage(renderer,rasterImage){await rasterImage.WhenBaseSizeReady();const baseWidth=rasterImage.GetBaseWidth();const baseHeight=rasterImage.GetBaseHeight();const preloadSize=256;const preloadAspectRatio=1;const svgAspectRatio=baseWidth/baseHeight;let rasterImageWidth=0;let rasterImageHeight=0;if(preloadAspectRatio>svgAspectRatio){rasterImageWidth=preloadSize*svgAspectRatio;rasterImageHeight=preloadSize}else{rasterImageWidth=preloadSize;rasterImageHeight=preloadSize/svgAspectRatio}await rasterImage.StartRasterForSize(renderer,
+rasterImageWidth,rasterImageHeight)}};
+
+}
+
+{
+'use strict';const C3=self.C3;const SVG_FILENAME=0;const INITIALLY_VISIBLE=1;const ORIGIN=2;const tempRect=C3.New(C3.Rect);const tempQuad=C3.New(C3.Quad);
+C3.Plugins.SVGPicture.Instance=class SVGPictureInstance extends C3.SDKWorldInstanceBase{constructor(inst,properties){super(inst);this._svgFilename="";this._rasterImage=null;this._collisionPoly=C3.New(C3.CollisionPoly);this.GetWorldInfo().SetSourceCollisionPoly(this._collisionPoly);if(properties){this._svgFilename=properties[SVG_FILENAME];this.GetWorldInfo().SetVisible(!!properties[INITIALLY_VISIBLE])}this._UpdateRasterImage();this.HandleWebGLContextLoss()}Release(){this._ReleaseRasterImage();super.Release()}_GetRasterManager(){return this.GetPlugin()._GetRasterManager()}_ReleaseRasterImage(){if(this._rasterImage){this._rasterImage.Release();
+this._rasterImage=null}}_UpdateRasterImage(){if(!this._svgFilename){this._ReleaseRasterImage();this._UpdateCollisionPolygon();return}if(this._rasterImage&&this._rasterImage.GetDataSource()===this._svgFilename)return;this._ReleaseRasterImage();this._rasterImage=this._GetRasterManager().AddImage(this._svgFilename);this._rasterImage.WhenBaseSizeReady().then(()=>this._UpdateCollisionPolygon())}_UpdateCollisionPolygon(){const wi=this.GetWorldInfo();const objectWidth=Math.abs(wi.GetWidth());const objectHeight=
+Math.abs(wi.GetHeight());let objectContentWidth=objectWidth;let objectContentHeight=objectHeight;if(this._rasterImage){const baseWidth=this._rasterImage.GetBaseWidth();const baseHeight=this._rasterImage.GetBaseHeight();if(baseWidth!==0&&baseHeight!==0){const svgAspectRatio=baseWidth/baseHeight;const objectAspectRatio=objectWidth/objectHeight;if(objectAspectRatio>svgAspectRatio){objectContentWidth=objectHeight*svgAspectRatio;objectContentHeight=objectHeight}else{objectContentWidth=objectWidth;objectContentHeight=
+objectWidth/svgAspectRatio}}}const w=objectContentWidth/objectWidth;const h=objectContentHeight/objectHeight;const ox=wi.GetOriginX();const oy=wi.GetOriginY();tempRect.setWH(ox-ox*w,oy-oy*h,w,h);this._collisionPoly.setFromRect(tempRect,ox,oy);wi.SetSourceCollisionPoly(this._collisionPoly)}_GetRasterImage(){return this._rasterImage}OnWebGLContextLost(){this._ReleaseRasterImage()}OnWebGLContextRestored(){this._UpdateRasterImage()}Draw(renderer){const wi=this.GetWorldInfo();const layer=wi.GetLayer();
+if(!this._rasterImage)return;const baseWidth=this._rasterImage.GetBaseWidth();const baseHeight=this._rasterImage.GetBaseHeight();if(baseWidth===0||baseHeight===0)return;const objectWidth=Math.abs(wi.GetWidth());const objectHeight=Math.abs(wi.GetHeight());const z=wi.GetZElevation();const deviceWidth=layer._GetLayerToDrawSurfaceScale(objectWidth,z);const deviceHeight=layer._GetLayerToDrawSurfaceScale(objectHeight,z);const svgAspectRatio=baseWidth/baseHeight;const objectAspectRatio=objectWidth/objectHeight;
+let objectContentWidth=0;let objectContentHeight=0;let rasterImageWidth=0;let rasterImageHeight=0;if(objectAspectRatio>svgAspectRatio){rasterImageWidth=deviceHeight*svgAspectRatio;rasterImageHeight=deviceHeight;objectContentWidth=objectHeight*svgAspectRatio;objectContentHeight=objectHeight}else{rasterImageWidth=deviceWidth;rasterImageHeight=deviceWidth/svgAspectRatio;objectContentWidth=objectWidth;objectContentHeight=objectWidth/svgAspectRatio}this._rasterImage.StartRasterForSize(renderer,rasterImageWidth,
+rasterImageHeight);const texture=this._rasterImage.GetRasterizedResult();if(!texture)return;renderer.SetTexture(texture);const x=wi.GetX();const y=wi.GetY();const w=objectContentWidth*Math.sign(wi.GetWidth());const h=objectContentHeight*Math.sign(wi.GetHeight());tempRect.setWH(x-wi.GetOriginX()*w,y-wi.GetOriginY()*h,w,h);const a=wi.GetAngle();if(a===0)tempQuad.setFromRect(tempRect);else{tempRect.offset(-x,-y);tempQuad.setFromRotatedRectPrecalc(tempRect,wi.GetSinAngle(),wi.GetCosAngle());tempQuad.offset(x,
+y)}tempRect.set(0,0,this._rasterImage.GetRasterWidth()/texture.GetWidth(),this._rasterImage.GetRasterHeight()/texture.GetHeight());renderer.Quad3(tempQuad,tempRect)}GetPropertyValueByIndex(index){}SetPropertyValueByIndex(index,value){}_SetImage(url){this._svgFilename=url;this._UpdateRasterImage()}GetCurrentSurfaceSize(){if(this._rasterImage){const texture=this._rasterImage.GetRasterizedResult();if(texture)return[texture.GetWidth(),texture.GetHeight()]}return[100,100]}GetCurrentTexRect(){if(this._rasterImage){const texture=
+this._rasterImage.GetRasterizedResult();if(texture){tempRect.set(0,0,this._rasterImage.GetRasterWidth()/texture.GetWidth(),this._rasterImage.GetRasterHeight()/texture.GetHeight());return tempRect}}return null}};
+
+}
+
+{
+'use strict';const C3=self.C3;C3.Plugins.SVGPicture.Cnds={};
+
+}
+
+{
+'use strict';const C3=self.C3;C3.Plugins.SVGPicture.Acts={SetImage(file){this._SetImage(file)},SetImageByName(file){this._SetImage(file)},SetEffect(effect){this.GetWorldInfo().SetBlendMode(effect);this._runtime.UpdateRender()}};
+
+}
+
+{
+'use strict';const C3=self.C3;C3.Plugins.SVGPicture.Exps={};
+
+}
+
+{
 const C3 = self.C3;
 self.C3_GetObjectRefTable = function () {
 	return [
@@ -3521,6 +3567,7 @@ self.C3_GetObjectRefTable = function () {
 		C3.Plugins.Touch,
 		C3.Plugins.Mouse,
 		C3.Plugins.Audio,
+		C3.Plugins.SVGPicture,
 		C3.Plugins.System.Cnds.OnLayoutStart,
 		C3.Plugins.Audio.Acts.Play,
 		C3.Plugins.Sprite.Acts.StopAnim,
@@ -3614,6 +3661,7 @@ self.C3_JsPropNameTable = [
 	{Caja9: 0},
 	{Caja10: 0},
 	{Caja11: 0},
+	{ImagenSVG: 0},
 	{InputFocus: 0},
 	{resultadoDivicion: 0},
 	{resultadoDivision2: 0}
